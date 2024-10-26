@@ -1,4 +1,4 @@
-from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
@@ -19,6 +19,26 @@ def DH(dh_pair: tuple[dh.DHPrivateKey, dh.DHPublicKey], dh_pub: dh.DHPublicKey):
     ).derive(shared_key)
     return derived_key
 
+def KDF_CK(CK):
+    h_ck = hmac.HMAC(CK, hashes.SHA256())
+    h_mk = h_ck.copy()
+    h_ck.update(b'\x01')
+    h_ck.update(b'\x02')
+    chain_key = h_ck.finalize()
+    msg_key = h_mk.finalize()
+    return chain_key, msg_key
+
+def KDF_RK(RK, dh_out):
+    key = HKDF(
+        algorithm=hashes.SHA256(),
+        length=64,
+        salt=RK,
+        info=b'kdf_rk',
+    ).derive(dh_out)
+    chain_key = key[:32]
+    msg_key = key[32:]
+    return chain_key, msg_key
+
 class User():
     def __init__(self):
         self.DHs = GENERATE_DH()
@@ -32,7 +52,8 @@ class User():
         self.MSKIPPED = dict()
 
     def dh(self, peer_dh_public_key: dh.DHPublicKey):
-        self.SK = DH(self.DHs, peer_dh_public_key)
+        self.DHr = peer_dh_public_key
+        self.SK = DH(self.DHs, self.DHr)
 
 if __name__ == "__main__":
     alice = User()
