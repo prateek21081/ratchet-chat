@@ -1,9 +1,11 @@
-import json
+import pickle
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
+from cryptography.hazmat.primitives.padding import PKCS7
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.hazmat.backends import default_backend
 
 MAX_SKIP = 10
@@ -39,7 +41,7 @@ def KDF_RK(RK, dh_out):
         algorithm=hashes.SHA256(),
         length=64,
         salt=RK,
-        info=b'kdf_rk',
+        info=b'KDF_RK',
         backend=default_backend(),
     ).derive(dh_out)
     chain_key = key[:32]
@@ -47,15 +49,16 @@ def KDF_RK(RK, dh_out):
     return chain_key, msg_key
 
 def CONCAT(ad, header):
-    return bytes(ad + json.dumps(header))
+    return ad + pickle.dumps(header)
 
-def HEADER(dh_pair, pn, n):
+def HEADER(dh_pair: tuple[dh.DHPrivateKey, dh.DHPublicKey], pn, n):
     header = {
-        'dh': dh_pair[1],
+        'dh': dh_pair[1].public_bytes(encoding=Encoding.PEM, format=PublicFormat.SubjectPublicKeyInfo),
         'pn': pn,
         'n': n,
     }
     return header
+
 
 def ENCRYPT(mk, plaintext, associated_data):
     key = HKDF(
@@ -66,25 +69,43 @@ def ENCRYPT(mk, plaintext, associated_data):
         backend=default_backend(),
     ).derive(mk)
     enc_key, auth_key, iv = key[:32], key[32:64], key[64:]
-    cipher = Cipher(algorithms.AES(enc_key), modes.CBC(iv))
-    # TODO: complete encryption
+    padder = PKCS7(256).padder()
+    padded_plaintext = padder.update(plaintext) + padder.finalize()
+    cipher = Cipher(algorithms.AES256(enc_key), modes.CBC(iv))
+    encryptor = cipher.encryptor()
+    ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
+    # TODO: add HMAC operation.
+    return ciphertext
 
 def DECRYPT(mk, ciphertext, associated_data):
-    # TODO: implement decryption
-    pass
+    key = HKDF(
+        algorithm=hashes.SHA256(),
+        length=80,
+        salt=b' '*80,
+        info=b'',
+        backend=default_backend(),
+    ).derive(mk)
+    dec_key, auth_key, iv = key[:32], key[32:64], key[64:]
+    cipher = Cipher(algorithms.AES256(dec_key), modes.CBC(iv))
+    decryptor = cipher.decryptor()
+    padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
+    unpadder = PKCS7(256).unpadder()
+    plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
+    # TODO: add HMAC operation.
+    return plaintext
 
 class User():
     def __init__(self, username:str = ''):
         self.username = username
         self.IK = X25519PrivateKey.generate()
         self.SPK = X25519PrivateKey.generate()
-        self.SK = None
+        self.SK = b''
 
         self.DHs = GENERATE_DH()
         self.DHr = None
-        self.RK = None
-        self.CKs = None
-        self.CKr = None
+        self.RK = b''
+        self.CKs = b''
+        self.CKr = b'' 
         self.Ns = 0
         self.Nr = 0
         self.PN = 0
@@ -130,19 +151,19 @@ class User():
         plaintext = self.try_skipped_message_keys(header, ciphertext, AD)
         if plaintext != None:
             return plaintext
-        if header.dh != self.DHr:
-            self.skip_message_keys(header.pn)
+        if header['dh'] != self.DHr:
+            self.skip_message_keys(header['pn'])
             self.dh_ratchet(header)
-        self.skip_message_keys(header.n)
+        self.skip_message_keys(header['n'])
         self.CKr, mk = KDF_CK(self.CKr)
         self.Nr += 1
         return DECRYPT(mk, ciphertext, CONCAT(AD, header))
 
     def try_skipped_message_keys(self, header, ciphertext, AD):
-        if (header.dh, header.n) not in self.MKSKIPPED:
+        if (header['dh'], header['n']) not in self.MKSKIPPED:
             return None
-        mk = self.MKSKIPPED[header.dh, header.n]
-        del self.MKSKIPPED[header.dh, header.n]
+        mk = self.MKSKIPPED[header['dh'], header['n']]
+        del self.MKSKIPPED[header['dh'], header['n']]
         return DECRYPT(mk, ciphertext, CONCAT(AD, header))
 
     def skip_message_keys(self, until):
@@ -158,7 +179,7 @@ class User():
         self.PN = self.Ns
         self.Ns = 0
         self.Nr = 0
-        self.DHr = header.dh
+        self.DHr = header['dh']
         self.RK, self.CKr = KDF_RK(self.RK, DH(self.DHs, self.DHr))
         self.DHs = GENERATE_DH()
         self.RK, self.CKs = KDF_RK(self.RK, DH(self.DHs, self.DHr))
@@ -173,6 +194,11 @@ if __name__ == "__main__":
 
     print("Alice's secret key:", alice.SK.hex())
     print("Bob's secret key:", bob.SK.hex())
+
+    ciphertext = ENCRYPT(alice.SK, b'Hello, world!', b'')
+    print(ciphertext)
+    plaintext = DECRYPT(alice.SK, ciphertext, b'')
+    print(plaintext)
     '''
     alice = User()
     bob = User()
