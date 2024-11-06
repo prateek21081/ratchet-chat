@@ -1,4 +1,5 @@
 import pickle
+
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -96,13 +97,13 @@ class HEADER:
     """Creates a new message header containing the DH ratchet public key from
     the key pair in dh_pair, the previous chain length pn, and the message
     number n."""
-
     def __init__(self, dh_pair: tuple[dh.DHPrivateKey, dh.DHPublicKey], pn: int, n: int):
         self.dh: dh.DHPublicKey = dh_pair[1]
         self.pn: int = pn
         self.n: int = n
-    
+
     def dh_bytes(self) -> bytes:
+        """Returns the serialized DHPublicKey in PEM format."""
         return self.dh.public_bytes(encoding=Encoding.PEM, format=PublicFormat.SubjectPublicKeyInfo)
 
 def CONCAT(ad: bytes, header: HEADER) -> bytes:
@@ -169,6 +170,11 @@ class User():
         self.DHr = dh_pub
         self.SK = DH(self.DHs, self.DHr)
 
+    def ratchet_init(self):
+        self.RK = self.SK
+        if self.DHr:
+            self.RK, self.CKs = KDF_RK(self.SK, DH(self.DHs, self.DHr))
+
     def ratchet_encrypt(self, plaintext: bytes, AD: bytes):
         self.CKs, mk = KDF_CK(self.CKs)
         header = HEADER(self.DHs, self.PN, self.Ns)
@@ -176,7 +182,6 @@ class User():
         return header, ENCRYPT(mk, plaintext, CONCAT(AD, header))
 
     def ratchet_decrypt(self, header: HEADER, ciphertext: bytes, AD: bytes):
-        print(header.dh)
         plaintext = self.try_skipped_message_keys(header, ciphertext, AD)
         if plaintext != None:
             return plaintext
@@ -214,16 +219,26 @@ class User():
         self.RK, self.CKs = KDF_RK(self.RK, DH(self.DHs, self.DHr))
 
 if __name__ == "__main__":
+    # Create two parties wanting to message each other.
     alice = User()
     bob = User()
 
-    EK_pub = alice.perform_x3dh_start(bob.IK.public_key(), bob.SPK.public_key())
+    # Perform X3DH and derive shared secret SK.
+    alice_EK_pub = alice.perform_x3dh_start(bob.IK.public_key(), bob.SPK.public_key())
+    bob.perform_x3dh_finish(alice.IK.public_key(), alice_EK_pub)
+    print("Alice SK:", alice.SK.hex())
+    print("Bob SK:", bob.SK.hex())
 
-    bob.perform_x3dh_finish(alice.IK.public_key(), EK_pub)
+    # Share Bob's DHPublicKey with Alice.
+    alice.DHr = bob.DHs[1]
 
-    print("Alice's secret key:", alice.SK.hex())
-    print("Bob's secret key:", bob.SK.hex())
+    # Intialize ratchets for both parties.
+    alice.ratchet_init()
+    bob.ratchet_init()
 
-    ciphertext = ENCRYPT(alice.SK, b'Hello, world!', b'')
-    print(ciphertext)
-    plaintext = DECRYPT(alice.SK, ciphertext, b'')
+    # Alice encrypts a message and sends it to Bob.
+    message = b'Hello, world!'
+    header, ciphertext = alice.ratchet_encrypt(message, b'')
+    # Bob receives a message from Alice and decrypts it.
+    plaintext = bob.ratchet_decrypt(header, ciphertext, b'')
+    print(message, ciphertext, plaintext, sep='\n')
