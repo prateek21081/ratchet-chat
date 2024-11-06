@@ -1,5 +1,4 @@
-import json
-from dataclasses import dataclass
+import pickle
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import dh
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
@@ -31,17 +30,6 @@ def DH(dh_pair: tuple[dh.DHPrivateKey, dh.DHPublicKey], dh_pub: dh.DHPublicKey) 
     ).derive(shared_key)
     return derived_key
 
-def KDF_CK(CK: bytes) -> tuple[bytes, bytes]:
-    """Returns a pair (32-byte chain key, 32-byte message key) as the output of
-    applying a KDF keyed by a 32-byte chain key ck to some constant."""
-    h_ck = hmac.HMAC(CK, hashes.SHA256())
-    h_mk = hmac.HMAC(CK, hashes.SHA256())
-    h_ck.update(b'\x01')
-    h_ck.update(b'\x02')
-    chain_key = h_ck.finalize()
-    msg_key = h_mk.finalize()
-    return chain_key, msg_key
-
 def KDF_RK(RK: bytes, dh_out: bytes) -> tuple[bytes, bytes]:
     """Returns a pair (32-byte root key, 32-byte chain key) as the output of
     applying a KDF keyed by a 32-byte root key rk to a Diffie-Hellman output
@@ -57,21 +45,16 @@ def KDF_RK(RK: bytes, dh_out: bytes) -> tuple[bytes, bytes]:
     msg_key = key[32:]
     return chain_key, msg_key
 
-def CONCAT(ad: bytes, header: dict) -> bytes:
-    """Encodes a message header into a parseable byte sequence, prepends the ad
-    byte sequence, and returns the result."""
-    return ad + bytes(json.dumps(header))
-
-def HEADER(dh_pair: tuple[dh.DHPrivateKey, dh.DHPublicKey], pn: int, n: int) -> dict:
-    """Creates a new message header containing the DH ratchet public key from
-    the key pair in dh_pair, the previous chain length pn, and the message
-    number n."""
-    header = {
-        'dh': dh_pair[1].public_bytes(encoding=Encoding.PEM, format=PublicFormat.SubjectPublicKeyInfo),
-        'pn': pn,
-        'n': n,
-    }
-    return header
+def KDF_CK(CK: bytes) -> tuple[bytes, bytes]:
+    """Returns a pair (32-byte chain key, 32-byte message key) as the output of
+    applying a KDF keyed by a 32-byte chain key ck to some constant."""
+    h_ck = hmac.HMAC(CK, hashes.SHA256())
+    h_mk = hmac.HMAC(CK, hashes.SHA256())
+    h_ck.update(b'\x01')
+    h_ck.update(b'\x02')
+    chain_key = h_ck.finalize()
+    msg_key = h_mk.finalize()
+    return chain_key, msg_key
 
 def ENCRYPT(mk: bytes, plaintext: bytes, associated_data: bytes) -> bytes:
     """Returns an AEAD encryption of plaintext with message key mk."""
@@ -109,31 +92,48 @@ def DECRYPT(mk: bytes, ciphertext: bytes, associated_data: bytes):
     # TODO: add HMAC operation.
     return plaintext
 
-@dataclass
-class Header():
-    dh: bytes
-    pn: int
-    n: int
+class HEADER:
+    """Creates a new message header containing the DH ratchet public key from
+    the key pair in dh_pair, the previous chain length pn, and the message
+    number n."""
+
+    def __init__(self, dh_pair: tuple[dh.DHPrivateKey, dh.DHPublicKey], pn: int, n: int):
+        self.dh: dh.DHPublicKey = dh_pair[1]
+        self.pn: int = pn
+        self.n: int = n
+    
+    def dh_bytes(self) -> bytes:
+        return self.dh.public_bytes(encoding=Encoding.PEM, format=PublicFormat.SubjectPublicKeyInfo)
+
+def CONCAT(ad: bytes, header: HEADER) -> bytes:
+    """Encodes a message header into a parseable byte sequence, prepends the ad
+    byte sequence, and returns the result."""
+    _header = {
+        'dh': header.dh_bytes(),
+        'pn': header.pn,
+        'n': header.n,
+    }
+    return ad + pickle.dumps(_header)
 
 class User():
     def __init__(self):
         # DH Ratchet key pair (the "sending" or "self" ratchet key)
-        self.DHs = GENERATE_DH()
+        self.DHs: tuple[dh.DHPrivateKey, dh.DHPublicKey] = GENERATE_DH()
         # DH Ratchet public key (the "received" or "remote" key)
-        self.DHr = b'' 
+        self.DHr: dh.DHPublicKey | None = None
         # 32-byte Root Key
-        self.RK = b'' 
+        self.RK: bytes = b''
         # 32-byte Chain Key for sending and receiving
-        self.CKs = b'' 
-        self.CKr = b''
+        self.CKs: bytes = b''
+        self.CKr: bytes = b''
         # Message numbers for sending and receiving
-        self.Ns = 0
-        self.Nr = 0
+        self.Ns: int = 0
+        self.Nr: int = 0
         # Number of messages in previous sending chain
-        self.PN = 0 
+        self.PN: int = 0
         # Dictionary of skipped-over message keys, indexed by ratchet public
         # key and message number.
-        self.MKSKIPPED = dict() 
+        self.MKSKIPPED = dict()
 
         self.IK = X25519PrivateKey.generate()
         self.SPK = X25519PrivateKey.generate()
@@ -152,7 +152,7 @@ class User():
             backend=default_backend()
         ).derive(DH1 + DH2 + DH3)
         return EK.public_key()
-    
+
     def perform_x3dh_finish(self, IKr: X25519PublicKey, EKr: X25519PublicKey):
         DH1 = self.SPK.exchange(IKr)
         DH2 = self.IK.exchange(EKr)
@@ -165,8 +165,8 @@ class User():
             backend=default_backend()
         ).derive(DH1 + DH2 + DH3)
 
-    def dh(self, peer_dh_public_key: dh.DHPublicKey):
-        self.DHr = peer_dh_public_key
+    def dh(self, dh_pub: dh.DHPublicKey):
+        self.DHr = dh_pub
         self.SK = DH(self.DHs, self.DHr)
 
     def ratchet_encrypt(self, plaintext: bytes, AD: bytes):
@@ -174,24 +174,25 @@ class User():
         header = HEADER(self.DHs, self.PN, self.Ns)
         self.Ns += 1
         return header, ENCRYPT(mk, plaintext, CONCAT(AD, header))
-    
-    def ratchet_decrypt(self, header, ciphertext: bytes, AD: bytes):
+
+    def ratchet_decrypt(self, header: HEADER, ciphertext: bytes, AD: bytes):
+        print(header.dh)
         plaintext = self.try_skipped_message_keys(header, ciphertext, AD)
         if plaintext != None:
             return plaintext
-        if header['dh'] != self.DHr:
-            self.skip_message_keys(header['pn'])
+        if header.dh != self.DHr:
+            self.skip_message_keys(header.pn)
             self.dh_ratchet(header)
-        self.skip_message_keys(header['n'])
+        self.skip_message_keys(header.n)
         self.CKr, mk = KDF_CK(self.CKr)
         self.Nr += 1
         return DECRYPT(mk, ciphertext, CONCAT(AD, header))
 
-    def try_skipped_message_keys(self, header, ciphertext: bytes, AD: bytes):
-        if (header['dh'], header['n']) not in self.MKSKIPPED:
+    def try_skipped_message_keys(self, header: HEADER, ciphertext: bytes, AD: bytes):
+        if (header.dh_bytes(), header.n) not in self.MKSKIPPED:
             return None
-        mk = self.MKSKIPPED[header['dh'], header['n']]
-        del self.MKSKIPPED[header['dh'], header['n']]
+        mk = self.MKSKIPPED[header.dh, header.n]
+        del self.MKSKIPPED[header.dh, header.n]
         return DECRYPT(mk, ciphertext, CONCAT(AD, header))
 
     def skip_message_keys(self, until: int):
@@ -203,11 +204,11 @@ class User():
                 self.MKSKIPPED[self.DHr, self.Nr] = mk
                 self.Nr += 1
 
-    def dh_ratchet(self, header):
+    def dh_ratchet(self, header: HEADER):
         self.PN = self.Ns
         self.Ns = 0
         self.Nr = 0
-        self.DHr = header['dh']
+        self.DHr = header.dh
         self.RK, self.CKr = KDF_RK(self.RK, DH(self.DHs, self.DHr))
         self.DHs = GENERATE_DH()
         self.RK, self.CKs = KDF_RK(self.RK, DH(self.DHs, self.DHr))
@@ -226,4 +227,3 @@ if __name__ == "__main__":
     ciphertext = ENCRYPT(alice.SK, b'Hello, world!', b'')
     print(ciphertext)
     plaintext = DECRYPT(alice.SK, ciphertext, b'')
-    print(plaintext)
