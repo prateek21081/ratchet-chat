@@ -226,8 +226,6 @@ if __name__ == "__main__":
     # Perform X3DH and derive shared secret SK.
     alice_EK_pub = alice.perform_x3dh_start(bob.IK.public_key(), bob.SPK.public_key())
     bob.perform_x3dh_finish(alice.IK.public_key(), alice_EK_pub)
-    print("Alice SK:", alice.SK.hex())
-    print("Bob SK:", bob.SK.hex())
 
     # Share Bob's DHPublicKey with Alice.
     alice.DHr = bob.DHs[1]
@@ -237,8 +235,14 @@ if __name__ == "__main__":
     bob.ratchet_init()
 
     # Alice encrypts a message and sends it to Bob.
-    message = b'Hello, world!'
+    message = b'Hello, Bob!'
     header, ciphertext = alice.ratchet_encrypt(message, b'')
     # Bob receives a message from Alice and decrypts it.
     plaintext = bob.ratchet_decrypt(header, ciphertext, b'')
-    print(message, ciphertext, plaintext, sep='\n')
+    print(message, ciphertext.hex(), plaintext, sep=' => ')
+    
+    # Bob replies in a similary fashion.
+    message = b'Hey, Alice!'
+    header, ciphertext = bob.ratchet_encrypt(message, b'')
+    plaintext = alice.ratchet_decrypt(header, ciphertext, b'')
+    print(message, ciphertext.hex(), plaintext, sep=' => ')
