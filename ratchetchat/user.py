@@ -1,4 +1,4 @@
-from base import *
+from .base import *
 
 class User():
     def __init__(self):
