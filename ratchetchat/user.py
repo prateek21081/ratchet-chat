@@ -78,7 +78,7 @@ class User():
         return DECRYPT(mk, ciphertext, CONCAT(AD, header))
 
     def try_skipped_message_keys(self, header: HEADER, ciphertext: bytes, AD: bytes):
-        if (header.dh_bytes(), header.n) not in self.MKSKIPPED:
+        if (KEY_BYTES(header.dh), header.n) not in self.MKSKIPPED:
             return None
         mk = self.MKSKIPPED[header.dh, header.n]
         del self.MKSKIPPED[header.dh, header.n]

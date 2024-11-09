@@ -9,6 +9,10 @@ from cryptography.hazmat.primitives.padding import PKCS7
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from cryptography.hazmat.backends import default_backend
 
+def KEY_BYTES(key):
+    """Returns the serialized PEM format key bytes."""
+    return key.public_bytes(encoding=Encoding.PEM, format=PublicFormat.SubjectPublicKeyInfo)
+
 MAX_SKIP = 10 # Maximum number of message keys that can be skipped in a single chain.
 DH_PARAMETERS = dh.generate_parameters(generator=2, key_size=2048)
 
@@ -102,15 +106,11 @@ class HEADER:
         self.pn: int = pn
         self.n: int = n
 
-    def dh_bytes(self) -> bytes:
-        """Returns the serialized DHPublicKey in PEM format."""
-        return self.dh.public_bytes(encoding=Encoding.PEM, format=PublicFormat.SubjectPublicKeyInfo)
-
 def CONCAT(ad: bytes, header: HEADER) -> bytes:
     """Encodes a message header into a parseable byte sequence, prepends the ad
     byte sequence, and returns the result."""
     _header = {
-        'dh': header.dh_bytes(),
+        'dh': KEY_BYTES(header.dh),
         'pn': header.pn,
         'n': header.n,
     }
