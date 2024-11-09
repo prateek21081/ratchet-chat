@@ -53,13 +53,11 @@ class User():
     def get_self_dh_pub(self) -> bytes:
         return KEY_TO_BYTES(self.DHs[1])
 
-    def set_peer_dh_pub(self, dh_pub: bytes) -> bool:
+    def set_peer_dh_pub(self, dh_pub: bytes):
         self.DHr = BYTES_TO_KEY(dh_pub)
-        return True
 
-    def dh(self, dh_pub: dh.DHPublicKey):
-        self.DHr = dh_pub
-        self.SK = DH(self.DHs, self.DHr)
+    def parse_header(self, header: dict):
+        return HEADER((None ,BYTES_TO_KEY(header['dh'])), header['pn'], header['n'])
 
     def ratchet_init(self):
         self.RK = self.SK

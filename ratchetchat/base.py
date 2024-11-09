@@ -111,12 +111,15 @@ class HEADER:
         self.pn: int = pn
         self.n: int = n
 
+    def state(self) -> dict:
+        _header = {
+            'dh': KEY_TO_BYTES(self.dh),
+            'pn': self.pn,
+            'n': self.n,
+        }
+        return _header
+
 def CONCAT(ad: bytes, header: HEADER) -> bytes:
     """Encodes a message header into a parseable byte sequence, prepends the ad
     byte sequence, and returns the result."""
-    _header = {
-        'dh': KEY_TO_BYTES(header.dh),
-        'pn': header.pn,
-        'n': header.n,
-    }
-    return ad + pickle.dumps(_header)
+    return ad + pickle.dumps(header.state())
