@@ -50,6 +50,13 @@ class User():
             backend=default_backend()
         ).derive(DH1 + DH2 + DH3)
 
+    def get_self_dh_pub(self) -> bytes:
+        return KEY_TO_BYTES(self.DHs[1])
+
+    def set_peer_dh_pub(self, dh_pub: bytes) -> bool:
+        self.DHr = BYTES_TO_KEY(dh_pub)
+        return True
+
     def dh(self, dh_pub: dh.DHPublicKey):
         self.DHr = dh_pub
         self.SK = DH(self.DHs, self.DHr)
@@ -78,7 +85,7 @@ class User():
         return DECRYPT(mk, ciphertext, CONCAT(AD, header))
 
     def try_skipped_message_keys(self, header: HEADER, ciphertext: bytes, AD: bytes):
-        if (KEY_BYTES(header.dh), header.n) not in self.MKSKIPPED:
+        if (KEY_TO_BYTES(header.dh), header.n) not in self.MKSKIPPED:
             return None
         mk = self.MKSKIPPED[header.dh, header.n]
         del self.MKSKIPPED[header.dh, header.n]

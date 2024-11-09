@@ -2,16 +2,21 @@ import pickle
 
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import dh
+from cryptography.hazmat.primitives.asymmetric.types import PublicKeyTypes
 from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey, X25519PublicKey
 from cryptography.hazmat.primitives.padding import PKCS7
-from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
+from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, load_pem_public_key
 from cryptography.hazmat.backends import default_backend
 
-def KEY_BYTES(key):
+def KEY_TO_BYTES(key: PublicKeyTypes) -> bytes:
     """Returns the serialized PEM format key bytes."""
     return key.public_bytes(encoding=Encoding.PEM, format=PublicFormat.SubjectPublicKeyInfo)
+
+def BYTES_TO_KEY(key: bytes) -> PublicKeyTypes:
+    """Returns the deserialized key from PEM bytes."""
+    return load_pem_public_key(key)
 
 MAX_SKIP = 10 # Maximum number of message keys that can be skipped in a single chain.
 DH_PARAMETERS = dh.generate_parameters(generator=2, key_size=2048)
@@ -110,7 +115,7 @@ def CONCAT(ad: bytes, header: HEADER) -> bytes:
     """Encodes a message header into a parseable byte sequence, prepends the ad
     byte sequence, and returns the result."""
     _header = {
-        'dh': KEY_BYTES(header.dh),
+        'dh': KEY_TO_BYTES(header.dh),
         'pn': header.pn,
         'n': header.n,
     }
