@@ -80,7 +80,6 @@ def KDF_CK(CK: bytes) -> tuple[bytes, bytes]:
 
 def ENCRYPT(mk: bytes, plaintext: bytes, associated_data: bytes) -> bytes:
     """Returns an encryption of plaintext with message key mk."""
-    print("in encrypt")
     key = HKDF(
         algorithm=hashes.SHA256(),
         length=80,
