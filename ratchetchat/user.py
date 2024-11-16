@@ -112,7 +112,7 @@ class User():
             plaintext: The decrypted message.
         """
         plaintext = self.try_skipped_message_keys(header, ciphertext, AD)
-        if plaintext != None:
+        if plaintext != None and plaintext != b'':
             return plaintext
         if header.dh != self.DHr:
             self.skip_message_keys(header.pn)
