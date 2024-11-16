@@ -1,7 +1,7 @@
 from .base import *
 
 class User():
-    def __init__(self, DHr: dh.DHPublicKey | None = None):
+    def __init__(self, DHr: dh.DHPublicKey | None = None) -> None:
         # DH Ratchet key pair (the "sending" or "self" ratchet key)
         self.DHs: tuple[dh.DHPrivateKey, dh.DHPublicKey] = GENERATE_DH(DHr)
         # DH Ratchet public key (the "received" or "remote" key)
@@ -24,7 +24,17 @@ class User():
         self.SPK = X25519PrivateKey.generate()
         self.SK = b''
 
-    def x3dh_start(self, IKr: X25519PublicKey, SPKr: X25519PublicKey):
+    def x3dh_start(self, IKr: X25519PublicKey, SPKr: X25519PublicKey) -> X25519PublicKey:
+        """
+        Initiates the X3DH key agreement protocol.
+
+        Args:
+            IKr : The recipient's identity key.
+            SPKr: The recipient's signed pre-key.
+
+        Returns:
+            EK: The generated ephemeral public key to be sent to the recipient.
+        """
         EK = X25519PrivateKey.generate()
         DH1 = self.IK.exchange(SPKr)
         DH2 = EK.exchange(IKr)
@@ -38,7 +48,15 @@ class User():
         ).derive(DH1 + DH2 + DH3)
         return EK.public_key()
 
-    def x3dh_finish(self, IKr: X25519PublicKey, EKr: X25519PublicKey):
+    def x3dh_finish(self, IKr: X25519PublicKey, EKr: X25519PublicKey) -> None:
+        """
+        Completes the X3DH key agreement protocol and derive
+        a common shared secret SK
+
+        Args:
+            IKr: The initiator's identity key.
+            EKr: The initiator's ephemeral key.
+        """
         DH1 = self.SPK.exchange(IKr)
         DH2 = self.IK.exchange(EKr)
         DH3 = self.SPK.exchange(EKr)
@@ -50,18 +68,49 @@ class User():
             backend=default_backend()
         ).derive(DH1 + DH2 + DH3)
 
-    def ratchet_init(self):
+    def ratchet_init(self) -> None:
+        """
+        This function sets the root key (RK) to the shared secret (SK).
+        If a Diffie-Hellman ratchet key (DHr) is available, it derives
+        new root and chain keys using the KDF_RK function.
+
+        Attributes:
+            RK : The root key.
+            CKs: The sending chain key, derived if DHr is available.
+        """
         self.RK = self.SK
         if self.DHr:
             self.RK, self.CKs = KDF_RK(self.SK, DH(self.DHs, self.DHr))
 
-    def ratchet_encrypt(self, plaintext: bytes, AD: bytes):
+    def ratchet_encrypt(self, plaintext: bytes, AD: bytes) -> tuple[HEADER, bytes]:
+        """
+        Encrypts a plaintext message using the current sending chain key.
+
+        Args:
+            plaintext: The message to be encrypted.
+            AD: Associated data to be included in the encryption.
+
+        Returns:
+            header: The message header containing the current DH ratchet key, previous message number, and current message number.
+            ciphertext: The encrypted message.
+        """
         self.CKs, mk = KDF_CK(self.CKs)
         header = HEADER(self.DHs, self.PN, self.Ns)
         self.Ns += 1
         return header, ENCRYPT(mk, plaintext, CONCAT(AD, header))
 
-    def ratchet_decrypt(self, header: HEADER, ciphertext: bytes, AD: bytes):
+    def ratchet_decrypt(self, header: HEADER, ciphertext: bytes, AD: bytes) -> bytes:
+        """
+        Decrypts a ciphertext message using the current receiving chain key.
+
+        Args:
+            header: The message header containing the sender's DH ratchet key, previous message number, and current message number.
+            ciphertext: The encrypted message.
+            AD: Associated data to be included in the decryption.
+
+        Returns:
+            plaintext: The decrypted message.
+        """
         plaintext = self.try_skipped_message_keys(header, ciphertext, AD)
         if plaintext != None:
             return plaintext
@@ -73,14 +122,31 @@ class User():
         self.Nr += 1
         return DECRYPT(mk, ciphertext, CONCAT(AD, header))
 
-    def try_skipped_message_keys(self, header: HEADER, ciphertext: bytes, AD: bytes):
+    def try_skipped_message_keys(self, header: HEADER, ciphertext: bytes, AD: bytes) -> bytes:
+        """
+        Attempts to decrypt a message using skipped message keys.
+
+        Args:
+            header: The message header containing the sender's DH ratchet key and message number.
+            ciphertext: The encrypted message.
+            AD: Associated data to be included in the decryption.
+
+        Returns:
+            plaintext: The decrypted message if a skipped key is found, otherwise None.
+        """
         if (KEY_TO_BYTES(header.dh), header.n) not in self.MKSKIPPED:
-            return None
+            return b''
         mk = self.MKSKIPPED[header.dh, header.n]
         del self.MKSKIPPED[header.dh, header.n]
         return DECRYPT(mk, ciphertext, CONCAT(AD, header))
 
-    def skip_message_keys(self, until: int):
+    def skip_message_keys(self, until: int) -> None:
+        """
+        Skips message keys until the specified message number.
+
+        Args:
+            until: The message number to skip to.
+        """
         if self.Nr + MAX_SKIP < until:
             raise RuntimeError()
         if self.CKr != None:
@@ -89,7 +155,13 @@ class User():
                 self.MKSKIPPED[self.DHr, self.Nr] = mk
                 self.Nr += 1
 
-    def dh_ratchet(self, header: HEADER):
+    def dh_ratchet(self, header: HEADER) -> None:
+        """
+        Performs a DH ratchet step, updating the root key and chain keys.
+
+        Args:
+            header: The message header containing the sender's DH ratchet key.
+        """
         self.PN = self.Ns
         self.Ns = 0
         self.Nr = 0

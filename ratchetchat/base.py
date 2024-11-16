@@ -1,4 +1,5 @@
 import pickle
+import logging
 
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric import dh
@@ -10,6 +11,12 @@ from cryptography.hazmat.primitives.padding import PKCS7
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat, load_pem_public_key
 from cryptography.hazmat.backends import default_backend
 
+def log(key: bytes, plaintext: bytes, ciphertext: bytes, message: str):
+    logger.info(f"Operation:  {message}")
+    logger.info(f"Key:        {key.hex()}")
+    logger.info(f"Plaintext:  {plaintext.decode()}")
+    logger.info(f"Ciphertext: {ciphertext.hex()}\n")
+
 def KEY_TO_BYTES(key: PublicKeyTypes) -> bytes:
     """Returns the serialized PEM format key bytes."""
     return key.public_bytes(encoding=Encoding.PEM, format=PublicFormat.SubjectPublicKeyInfo)
@@ -20,6 +27,8 @@ def BYTES_TO_KEY(key: bytes) -> PublicKeyTypes:
 
 MAX_SKIP = 10 # Maximum number of message keys that can be skipped in a single chain.
 DH_PARAMETERS = dh.generate_parameters(generator=2, key_size=512, backend=default_backend())
+logging.basicConfig(filename="logs/chat_log.txt", format='%(asctime)s %(message)s', filemode='w', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def GENERATE_DH(DHr: dh.DHPublicKey | None = None) -> tuple[dh.DHPrivateKey, dh.DHPublicKey]:
     """Returns a new Diffie-Hellman key pair."""
@@ -70,7 +79,7 @@ def KDF_CK(CK: bytes) -> tuple[bytes, bytes]:
     return chain_key, msg_key
 
 def ENCRYPT(mk: bytes, plaintext: bytes, associated_data: bytes) -> bytes:
-    """Returns an AEAD encryption of plaintext with message key mk."""
+    """Returns an encryption of plaintext with message key mk."""
     key = HKDF(
         algorithm=hashes.SHA256(),
         length=80,
@@ -84,11 +93,12 @@ def ENCRYPT(mk: bytes, plaintext: bytes, associated_data: bytes) -> bytes:
     cipher = Cipher(algorithms.AES256(enc_key), modes.CBC(iv))
     encryptor = cipher.encryptor()
     ciphertext = encryptor.update(padded_plaintext) + encryptor.finalize()
-    # TODO: add HMAC operation.
+
+    log(enc_key, plaintext, ciphertext, "Encrypt")
     return ciphertext
 
 def DECRYPT(mk: bytes, ciphertext: bytes, associated_data: bytes):
-    """Returns the AEAD decryption of ciphertext with message key mk."""
+    """Returns the decryption of ciphertext with message key mk."""
     key = HKDF(
         algorithm=hashes.SHA256(),
         length=80,
@@ -102,7 +112,8 @@ def DECRYPT(mk: bytes, ciphertext: bytes, associated_data: bytes):
     padded_plaintext = decryptor.update(ciphertext) + decryptor.finalize()
     unpadder = PKCS7(256).unpadder()
     plaintext = unpadder.update(padded_plaintext) + unpadder.finalize()
-    # TODO: add HMAC operation.
+
+    log(dec_key, plaintext, ciphertext, "Decrypt")
     return plaintext
 
 class HEADER:
