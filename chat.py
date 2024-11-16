@@ -28,10 +28,25 @@ def get_dh_pub() -> bytes:
     return KEY_TO_BYTES(user.DHs[1])
 
 @host.register_function()
+def get_ik_pub() -> bytes:
+    return KEY_TO_BYTES(user.IK.public_key())
+
+@host.register_function()
+def get_spk_pub() -> bytes:
+    return KEY_TO_BYTES(user.SPK.public_key())
+
+@host.register_function()
+def x3dh(IK_pub: bytes, EK_pub: bytes):
+    IKr = BYTES_TO_KEY(IK_pub)
+    EKr = BYTES_TO_KEY(EK_pub)
+    user.x3dh_finish(IKr, EKr)
+    
+@host.register_function()
 def init_ratchet():
     user.ratchet_init()
     global peer_connected
     peer_connected = True
+    print(user.SK)
 
 @host.register_function()
 def send_message(header: dict, ciphertext: bytes):
@@ -50,14 +65,20 @@ def ping():
     return True
 
 def connect_to_peer():
-    DHr = BYTES_TO_KEY(peer.get_dh_pub())
-    if not isinstance(DHr, dh.DHPublicKey):
-        raise TypeError() 
     global user, peer_connected
+    DHr = BYTES_TO_KEY(peer.get_dh_pub())
     user = User(DHr)
+    # perform X3DH
+    IKr = BYTES_TO_KEY(peer.get_ik_pub())
+    SPKr = BYTES_TO_KEY(peer.get_spk_pub())
+    EK_pub = user.x3dh_start(IKr, SPKr)
+    peer.x3dh(KEY_TO_BYTES(user.IK.public_key()), KEY_TO_BYTES(EK_pub))
+    # initialize ratchets
     user.ratchet_init()
     peer.init_ratchet()
     peer_connected = True
+    print(user.SK)
+
 
 class ChatShell(cmd.Cmd):
     prompt = 'self: '

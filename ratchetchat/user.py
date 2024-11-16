@@ -24,7 +24,7 @@ class User():
         self.SPK = X25519PrivateKey.generate()
         self.SK = b''
 
-    def perform_x3dh_start(self, IKr: X25519PublicKey, SPKr: X25519PublicKey):
+    def x3dh_start(self, IKr: X25519PublicKey, SPKr: X25519PublicKey):
         EK = X25519PrivateKey.generate()
         DH1 = self.IK.exchange(SPKr)
         DH2 = EK.exchange(IKr)
@@ -38,7 +38,7 @@ class User():
         ).derive(DH1 + DH2 + DH3)
         return EK.public_key()
 
-    def perform_x3dh_finish(self, IKr: X25519PublicKey, EKr: X25519PublicKey):
+    def x3dh_finish(self, IKr: X25519PublicKey, EKr: X25519PublicKey):
         DH1 = self.SPK.exchange(IKr)
         DH2 = self.IK.exchange(EKr)
         DH3 = self.SPK.exchange(EKr)
