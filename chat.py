@@ -22,11 +22,13 @@ user = User()
 def get_dh_pub() -> bytes:
     return KEY_TO_BYTES(user.DHs[1])
 
-host.register_function(user.ratchet_init)
+@host.register_function()
+def init_ratchet():
+    user.ratchet_init()
 
 @host.register_function()
 def send_message(header: dict, ciphertext: bytes):
-    _header = user.parse_header(header)
+    _header = HEADER((user.DHs[0], BYTES_TO_KEY(header['dh'])), header['pn'], header['n'])
     plaintext = user.ratchet_decrypt(_header, ciphertext, b'')
     print(f"(peer) {plaintext}")
 
@@ -40,7 +42,7 @@ def ping():
 
 peer = ServerProxy(f"http://{args.peer_ip}:{args.peer_port}", allow_none=True, use_builtin_types=True)
 
-# wait for peer to be available
+print("Waiting for peer to be available...")
 while True:
     try:
         peer.ping()
@@ -54,15 +56,22 @@ class ChatShell(cmd.Cmd):
     def do_ping(self, arg):
         print(peer.ping())
 
-    def do_set_peer_dh_pub(self, arg):
-        user.set_peer_dh_pub(peer.get_dh_pub())
-
     def do_get_peer_dh_pub(self, arg):
-        print(peer.get_dh_pub())
+        dh_pub = peer.get_dh_pub()
+        print(dh_pub)
+        dh_obj = load_pem_public_key(dh_pub, backend=default_backend())
+        if isinstance(dh_obj, dh.DHPublicKey):
+            global user
+            user = User(dh_obj.parameters())
+            user.DHr = dh_obj
+            print(KEY_TO_BYTES(user.DHr))
+            print("New user instance created!!")
 
-    def do_ratchet_init(self, arg):
+    def do_self_init_ratchet(self, arg):
         user.ratchet_init()
-        peer.ratchet_init()
+
+    def do_peer_init_ratchet(self, arg):
+        peer.init_ratchet()
 
     def do_msg(self, arg):
         peer.send_msg(bytes(arg, encoding='utf-8'))

@@ -1,9 +1,9 @@
 from .base import *
 
 class User():
-    def __init__(self):
+    def __init__(self, dh_parameters = None):
         # DH Ratchet key pair (the "sending" or "self" ratchet key)
-        self.DHs: tuple[dh.DHPrivateKey, dh.DHPublicKey] = GENERATE_DH()
+        self.DHs: tuple[dh.DHPrivateKey, dh.DHPublicKey] = GENERATE_DH(dh_parameters)
         # DH Ratchet public key (the "received" or "remote" key)
         self.DHr: dh.DHPublicKey | None = None
         # 32-byte Root Key
@@ -49,13 +49,6 @@ class User():
             info=b'',
             backend=default_backend()
         ).derive(DH1 + DH2 + DH3)
-
-    def set_peer_dh_pub(self, dh_pub: bytes):
-        self.DHr = BYTES_TO_KEY(dh_pub)
-        print(self.DHr)
-
-    def parse_header(self, header: dict):
-        return HEADER((None ,BYTES_TO_KEY(header['dh'])), header['pn'], header['n'])
 
     def ratchet_init(self):
         self.RK = self.SK
