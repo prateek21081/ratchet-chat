@@ -50,11 +50,9 @@ class User():
             backend=default_backend()
         ).derive(DH1 + DH2 + DH3)
 
-    def get_self_dh_pub(self) -> bytes:
-        return KEY_TO_BYTES(self.DHs[1])
-
     def set_peer_dh_pub(self, dh_pub: bytes):
         self.DHr = BYTES_TO_KEY(dh_pub)
+        print(self.DHr)
 
     def parse_header(self, header: dict):
         return HEADER((None ,BYTES_TO_KEY(header['dh'])), header['pn'], header['n'])
