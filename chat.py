@@ -80,7 +80,7 @@ def ping() -> bool:
 def connect_to_peer() -> bool:
     """Intiate a Double Ratchet chat session with peer."""
     global user, peer_connected
-    DHr: DHPublicKey = BYTES_TO_KEY(peer.get_dh_pub())
+    DHr: dh.DHPublicKey = BYTES_TO_KEY(peer.get_dh_pub())
     user = User(DHr) # update user instance with peer's DH public key.
     # Perform X3DH key exchange
     IKr: X25519PublicKey = BYTES_TO_KEY(peer.get_ik_pub())
