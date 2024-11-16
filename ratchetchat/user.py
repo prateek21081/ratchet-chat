@@ -1,11 +1,11 @@
 from .base import *
 
 class User():
-    def __init__(self, dh_parameters = None):
+    def __init__(self, DHr: dh.DHPublicKey | None = None):
         # DH Ratchet key pair (the "sending" or "self" ratchet key)
-        self.DHs: tuple[dh.DHPrivateKey, dh.DHPublicKey] = GENERATE_DH(dh_parameters)
+        self.DHs: tuple[dh.DHPrivateKey, dh.DHPublicKey] = GENERATE_DH(DHr)
         # DH Ratchet public key (the "received" or "remote" key)
-        self.DHr: dh.DHPublicKey | None = None
+        self.DHr: dh.DHPublicKey | None = DHr
         # 32-byte Root Key
         self.RK: bytes = b''
         # 32-byte Chain Key for sending and receiving

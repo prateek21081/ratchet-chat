@@ -19,14 +19,13 @@ def BYTES_TO_KEY(key: bytes) -> PublicKeyTypes:
     return load_pem_public_key(key, backend=default_backend())
 
 MAX_SKIP = 10 # Maximum number of message keys that can be skipped in a single chain.
-DH_PARAMETERS = dh.generate_parameters(generator=2, key_size=2048, backend=default_backend())
+DH_PARAMETERS = dh.generate_parameters(generator=2, key_size=512, backend=default_backend())
 
-def GENERATE_DH(dh_parameters = None) -> tuple[dh.DHPrivateKey, dh.DHPublicKey]:
+def GENERATE_DH(DHr: dh.DHPublicKey | None = None) -> tuple[dh.DHPrivateKey, dh.DHPublicKey]:
     """Returns a new Diffie-Hellman key pair."""
-    global DH_PARAMETERS
-    if dh_parameters:
-        print("Using custom DHParameters")
-        DH_PARAMETERS = dh_parameters
+    if DHr:
+        global DH_PARAMETERS
+        DH_PARAMETERS = DHr.parameters()
     private_key = DH_PARAMETERS.generate_private_key()
     public_key = private_key.public_key()
     return (private_key, public_key)

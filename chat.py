@@ -1,9 +1,10 @@
 from xmlrpc.server import SimpleXMLRPCServer
 from xmlrpc.client import ServerProxy
 from threading import Thread
-import argparse
-from ratchetchat.user import User
 import cmd
+import argparse
+
+from ratchetchat.user import User
 from ratchetchat.base import *
 
 parser = argparse.ArgumentParser(prog='chat')
@@ -56,21 +57,13 @@ class ChatShell(cmd.Cmd):
     def do_ping(self, arg):
         print(peer.ping())
 
-    def do_get_peer_dh_pub(self, arg):
-        dh_pub = peer.get_dh_pub()
-        print(dh_pub)
-        dh_obj = load_pem_public_key(dh_pub, backend=default_backend())
-        if isinstance(dh_obj, dh.DHPublicKey):
-            global user
-            user = User(dh_obj.parameters())
-            user.DHr = dh_obj
-            print(KEY_TO_BYTES(user.DHr))
-            print("New user instance created!!")
-
-    def do_self_init_ratchet(self, arg):
+    def do_connect(self, arg):
+        DHr = BYTES_TO_KEY(peer.get_dh_pub())
+        if not isinstance(DHr, dh.DHPublicKey):
+            raise TypeError() 
+        global user
+        user = User(DHr)
         user.ratchet_init()
-
-    def do_peer_init_ratchet(self, arg):
         peer.init_ratchet()
 
     def do_msg(self, arg):
