@@ -6,8 +6,8 @@ if __name__ == "__main__":
     bob = user.User()
 
     # Perform X3DH and derive shared secret SK.
-    alice_EK_pub = alice.perform_x3dh_start(bob.IK.public_key(), bob.SPK.public_key())
-    bob.perform_x3dh_finish(alice.IK.public_key(), alice_EK_pub)
+    alice_EK_pub = alice.x3dh_start(bob.IK.public_key(), bob.SPK.public_key())
+    bob.x3dh_finish(alice.IK.public_key(), alice_EK_pub)
 
     # Share Bob's DHPublicKey with Alice.
     alice.DHr = bob.DHs[1]
