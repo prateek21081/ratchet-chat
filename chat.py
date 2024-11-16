@@ -112,6 +112,7 @@ class ChatShell(cmd.Cmd):
 
     def do__exit(self, arg):
         """Exit from app."""
+        host.shutdown()
         exit()
 
 print("Waiting for peer to be available...", end='', flush=True)
