@@ -115,7 +115,7 @@ class ChatShell(cmd.Cmd):
         host.shutdown()
         exit()
 
-print("Waiting for peer to be available...", end='', flush=True)
+print("Waiting for peer to come online...", end='', flush=True)
 while True:
     try:
         peer.ping()
