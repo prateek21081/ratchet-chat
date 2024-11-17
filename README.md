@@ -14,7 +14,6 @@ This repository implements the Double Ratchet algorithm, a cryptographic protoco
 - **Initialization**: Establishes shared keys using the X3DH key agreement protocol.
 
 ## Getting Started
-1. Clone the repository:
    ```bash
    git clone https://github.com/prateek21081/ratchet-chat.git
    cd ratchet-chat
