@@ -18,3 +18,5 @@ This repository implements the Double Ratchet algorithm, a cryptographic protoco
    ```bash
    git clone https://github.com/prateek21081/ratchet-chat.git
    cd ratchet-chat
+   pip install -r requirements.txt
+   python chat.py --peer-ip <IP>
